@@ -3,7 +3,7 @@
 LiteraAI turns uploaded academic PDFs into searchable research material. This MVP includes:
 - PDF upload and text extraction with PyMuPDF, preserving page numbers.
 - SQLite storage for papers and extracted chunks.
-- Local retrieval using SQLite FTS5 when available, with a token-overlap fallback.
+- Local lexical retrieval using token overlap. SQLite FTS5 is maintained as an index but is not currently queried by the retriever.
 - Optional local Ollama generation; answers include source/page citations.
 - Basic cross-paper comparison, corpus-bounded research-gap suggestions, knowledge graph data, and retrieval evaluation endpoints.
 - React + Vite frontend with Dashboard, Library/Workspace, Assistant, Compare, Gaps, Graph and Evaluation views.
@@ -61,13 +61,13 @@ Edit `backend/.env`:
 
 1. Upload a text-based academic PDF from Workspace.
 2. Backend extracts page text, splits it into overlapping chunks, and stores paper/chunk metadata in SQLite.
-3. Ask a question in Assistant. LiteraAI retrieves matching chunks and returns citations such as `[1] Paper title, p. 4`.
+3. Ask a question in Assistant. LiteraAI retrieves matching chunks and returns source snippets with paper and page references. If Ollama is disabled or unavailable, the assistant returns the strongest retrieved excerpts directly instead of claiming to synthesize an answer.
 4. Compare two or more uploaded papers using extracted text heuristics.
 5. Generate potential research directions from limitations/gap-related passages. These are corpus-bounded suggestions, not proof of global novelty.
 6. View a simple paper-to-topic graph.
 7. Run a small retrieval smoke evaluation against your uploaded corpus.
 
-Scanned PDFs without an embedded text layer need OCR; OCR is not included in this MVP.
+Uploads are checked for PDF content and selectable text. Scanned PDFs without an embedded text layer need OCR; OCR is not included in this MVP, so those uploads are rejected with an explanation instead of appearing as successfully processed papers.
 
 ## API overview
 

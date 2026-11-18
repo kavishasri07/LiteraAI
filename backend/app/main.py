@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from app.core.config import settings
 from app.database.db import init_db, db_session
-from app.ingestion.pdf_parser import parse_pdf
+from app.ingestion.pdf_parser import PDFParseError, parse_pdf
 from app.retrieval.retriever import retrieve
 from app.llm.ollama_client import generate_answer
 from app.reasoning.analysis import compare_papers, research_gaps, build_graph
@@ -53,29 +53,42 @@ def health():
 async def upload_pdf(file: UploadFile = File(...)):
     if not file.filename or not file.filename.lower().endswith(".pdf"):
         raise HTTPException(400, "Please upload a PDF file.")
-    content = await file.read()
-    if len(content) > settings.max_upload_mb * 1024 * 1024:
+    max_bytes = settings.max_upload_mb * 1024 * 1024
+    content = await file.read(max_bytes + 1)
+    if len(content) > max_bytes:
         raise HTTPException(413, f"File exceeds {settings.max_upload_mb} MB limit.")
+    if b"%PDF-" not in content[:1024]:
+        raise HTTPException(400, "The uploaded file does not have a valid PDF header.")
     paper_id = str(uuid.uuid4())
     safe_name = Path(file.filename).name
     dest = settings.uploads_path / f"{paper_id}.pdf"
     dest.write_bytes(content)
     try:
         parsed = parse_pdf(str(dest))
-    except Exception as exc:
+    except PDFParseError as exc:
         dest.unlink(missing_ok=True)
-        raise HTTPException(422, f"Could not parse PDF: {exc}")
+        raise HTTPException(422, str(exc))
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(422, "Could not parse the uploaded PDF.")
+    if not parsed["chunks"]:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(422, "No selectable text was found. Scanned PDFs need OCR, which is not included in this MVP.")
     title = next((p["text"].splitlines()[0][:180] for p in parsed["pages"] if p["text"].strip()), Path(safe_name).stem)
-    with db_session() as conn:
-        conn.execute("INSERT INTO papers(id,title,filename,file_path,page_count,status,created_at) VALUES(?,?,?,?,?,?,?)",
-                     (paper_id,title,safe_name,str(dest),parsed["page_count"],"processed",datetime.now(timezone.utc).isoformat()))
-        for chunk in parsed["chunks"]:
-            cur = conn.execute("INSERT INTO chunks(paper_id,page_number,section,content) VALUES(?,?,?,?)",
-                               (paper_id,chunk["page_number"],chunk["section"],chunk["content"]))
-            try:
-                conn.execute("INSERT INTO chunks_fts(content,paper_id,chunk_id) VALUES(?,?,?)",(chunk["content"],paper_id,cur.lastrowid))
-            except Exception:
-                pass
+    try:
+        with db_session() as conn:
+            conn.execute("INSERT INTO papers(id,title,filename,file_path,page_count,status,created_at) VALUES(?,?,?,?,?,?,?)",
+                         (paper_id,title,safe_name,str(dest),parsed["page_count"],"processed",datetime.now(timezone.utc).isoformat()))
+            for chunk in parsed["chunks"]:
+                cur = conn.execute("INSERT INTO chunks(paper_id,page_number,section,content) VALUES(?,?,?,?)",
+                                   (paper_id,chunk["page_number"],chunk["section"],chunk["content"]))
+                try:
+                    conn.execute("INSERT INTO chunks_fts(content,paper_id,chunk_id) VALUES(?,?,?)",(chunk["content"],paper_id,cur.lastrowid))
+                except Exception:
+                    pass
+    except Exception:
+        dest.unlink(missing_ok=True)
+        raise HTTPException(500, "The PDF was read, but could not be saved to the local research library.")
     return {"paper_id": paper_id, "title": title, "page_count": parsed["page_count"], "chunks_created": len(parsed["chunks"]), "status": "processed",
             "warning": "No text was extracted. This may be a scanned PDF; OCR is not included in the MVP." if not parsed["chunks"] else None}
 
@@ -129,11 +142,10 @@ def chat(req: ChatRequest):
                 "citations": [], "verification": "insufficient_evidence", "retrieval_mode": "local_lexical_mvp"}
     answer = generate_answer(req.question, evidence)
     if not answer:
-        answer = (
-        "I retrieved relevant passages from your uploaded paper, "
-        "but could not generate a synthesized answer. "
-        "Please check whether Ollama is running and try again."
-    )
+        answer = "Ollama is disabled or unavailable, so here are the strongest matching passages from your papers:\n\n" + "\n\n".join(
+            f"[{i}] {e['title']} (page {e['page_number']}): “{e['content'][:700].strip()}”"
+            for i, e in enumerate(evidence[:3], 1)
+        )
     citations = [{"id": i, "paper_id": e["paper_id"], "paper_title": e["title"], "page_number": e["page_number"],
                   "section": e["section"], "snippet": e["content"][:500], "confidence": "retrieved_match"} for i,e in enumerate(evidence,1)]
     return {"answer": answer, "citations": citations, "verification": "retrieval_match_not_semantic_verification",

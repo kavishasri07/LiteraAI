@@ -2,6 +2,9 @@ import re
 import fitz
 from app.core.config import settings
 
+class PDFParseError(ValueError):
+    """Raised when a PDF cannot be safely opened or contains no usable text."""
+
 def clean_text(text: str) -> str:
     text = text.replace("\x00", " ")
     text = re.sub(r"[ \t]+", " ", text)
@@ -26,11 +29,20 @@ def chunk_page(text: str, page_number: int):
     return chunks
 
 def parse_pdf(path: str):
-    doc = fitz.open(path)
-    pages = []
-    all_chunks = []
-    for idx, page in enumerate(doc):
-        text = clean_text(page.get_text("text"))
-        pages.append({"page_number": idx + 1, "text": text})
-        all_chunks.extend(chunk_page(text, idx + 1))
-    return {"page_count": len(doc), "pages": pages, "chunks": all_chunks}
+    try:
+        doc = fitz.open(path)
+    except (fitz.FileDataError, RuntimeError) as exc:
+        raise PDFParseError("The uploaded file is not a readable PDF.") from exc
+    try:
+        page_count = doc.page_count
+        if not doc.is_pdf or page_count == 0:
+            raise PDFParseError("The uploaded PDF does not contain any pages.")
+        pages = []
+        all_chunks = []
+        for idx, page in enumerate(doc):
+            text = clean_text(page.get_text("text"))
+            pages.append({"page_number": idx + 1, "text": text})
+            all_chunks.extend(chunk_page(text, idx + 1))
+    finally:
+        doc.close()
+    return {"page_count": page_count, "pages": pages, "chunks": all_chunks}
