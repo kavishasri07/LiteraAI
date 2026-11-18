@@ -92,6 +92,14 @@ Created automatically under `backend/data/`:
 
 Do not commit real research PDFs or private datasets unless you have permission.
 
+## Vercel public demo
+
+The repository includes a single-project Vercel configuration for a public demo. Import the repository root (not `frontend/`) or deploy the repository root with the Vercel CLI. The frontend is built from `frontend/`, and the FastAPI app is exposed through `api/index.py`.
+
+This demo intentionally uses `/tmp` for its SQLite database and uploaded PDFs. Vercel Functions provide temporary scratch storage rather than a durable filesystem, so papers and the library can disappear between function instances or deployments. All demo visitors share the same unauthenticated library and can view or delete its papers. Do not upload private or sensitive research files. Ollama stays disabled in the cloud, so Assistant returns retrieved evidence excerpts. Uploads are limited to 4 MB to fit Vercel's function request-size limit.
+
+For durable or private use, deploy with authentication, persistent database and object storage, and a hosted model endpoint; those services are not configured by this demo.
+
 ## Tests
 
 From `backend/`:

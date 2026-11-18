@@ -19,10 +19,10 @@ function Shell({ children }) {
       <div className="brand"><div className="brand-mark"><Sparkles size={19}/></div><div><b>LiteraAI</b><small>RESEARCH INTELLIGENCE</small></div><button className="mobile-close" onClick={()=>setMobile(false)}><X size={18}/></button></div>
       <div className="workspace-label">WORKSPACE</div>
       <nav>{nav.map(([to,label,Icon])=><NavLink key={to} to={to} end={to==='/'} onClick={()=>setMobile(false)} className={({isActive})=>cx('nav-link',isActive&&'active')}><Icon size={17}/><span>{label}</span>{label==='Workspace'&&<span className="nav-dot"/>}</NavLink>)}</nav>
-      <div className="sidebar-bottom"><div className="local-card"><div className="local-icon"><ShieldCheck size={16}/></div><div><b>Local-first workspace</b><small>Your documents stay on this machine.</small></div></div><div className="version">LITERAAI MVP <span>v0.1.0</span></div></div>
+      <div className="sidebar-bottom"><div className="local-card"><div className="local-icon"><ShieldCheck size={16}/></div><div><b>Shared demo workspace</b><small>Uploads are public and temporary.</small></div></div><div className="version">LITERAAI MVP <span>v0.1.0</span></div></div>
     </aside>
     {mobile && <div className="scrim" onClick={()=>setMobile(false)}/>}
-    <main className="main-area"><header className="topbar"><button className="mobile-menu" onClick={()=>setMobile(true)}><Menu/></button><div className="breadcrumb">Workspace <ChevronRight size={14}/> <b>{active}</b></div><div className="top-actions"><span className="status-pill"><i/> LOCAL MODE</span><div className="avatar">L</div></div></header><div className="page-wrap">{children}</div></main>
+    <main className="main-area"><header className="topbar"><button className="mobile-menu" onClick={()=>setMobile(true)}><Menu/></button><div className="breadcrumb">Workspace <ChevronRight size={14}/> <b>{active}</b></div><div className="top-actions"><span className="status-pill"><i/> PUBLIC DEMO</span><div className="avatar">L</div></div></header><div className="page-wrap"><div className="notice" role="alert"><b>Public demo</b><p>Uploaded papers are visible to visitors and may be deleted or reset. Do not upload private research documents.</p></div>{children}</div></main>
   </div>
 }
 function PageTitle({eyebrow,title,desc,action}) { return <div className="page-title"><div><div className="eyebrow">{eyebrow}</div><h1>{title}</h1><p>{desc}</p></div>{action}</div> }
