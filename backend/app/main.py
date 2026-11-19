@@ -8,6 +8,7 @@ from app.core.config import settings
 from app.database.db import init_db, db_session
 from app.ingestion.pdf_parser import PDFParseError, parse_pdf
 from app.retrieval.retriever import retrieve
+from app.llm.extractive_answer import extractive_answer
 from app.llm.ollama_client import generate_answer
 from app.reasoning.analysis import compare_papers, research_gaps, build_graph
 from app.api.schemas import ChatRequest, CompareRequest, GapRequest
@@ -138,14 +139,11 @@ def delete_paper(paper_id: str):
 def chat(req: ChatRequest):
     evidence = retrieve(req.question, req.paper_ids, limit=6)
     if not evidence:
-        return {"answer": "I couldn't find relevant passages in the uploaded papers. Try a more specific question or upload additional papers.",
+        return {"answer": f"I couldn't find passages matching the key terms in “{req.question}” in the uploaded papers. Try a more specific question or upload additional papers.",
                 "citations": [], "verification": "insufficient_evidence", "retrieval_mode": "local_lexical_mvp"}
     answer = generate_answer(req.question, evidence)
     if not answer:
-        answer = "Ollama is disabled or unavailable, so here are the strongest matching passages from your papers:\n\n" + "\n\n".join(
-            f"[{i}] {e['title']} (page {e['page_number']}): “{e['content'][:700].strip()}”"
-            for i, e in enumerate(evidence[:3], 1)
-        )
+        answer = extractive_answer(req.question, evidence)
     citations = [{"id": i, "paper_id": e["paper_id"], "paper_title": e["title"], "page_number": e["page_number"],
                   "section": e["section"], "snippet": e["content"][:500], "confidence": "retrieved_match"} for i,e in enumerate(evidence,1)]
     return {"answer": answer, "citations": citations, "verification": "retrieval_match_not_semantic_verification",

@@ -2,6 +2,7 @@ import fitz
 
 from app.ingestion.pdf_parser import chunk_page, clean_text
 from app.retrieval.retriever import terms
+from app.llm.extractive_answer import extractive_answer
 
 def test_clean_text():
     assert clean_text("hello   world\n\n\nnext") == "hello world\n\nnext"
@@ -40,3 +41,19 @@ def test_parse_pdf_rejects_non_pdf(tmp_path):
         pass
     else:
         raise AssertionError("parse_pdf should reject invalid PDF data")
+
+def test_extractive_answer_selects_sentence_for_question():
+    evidence = [{
+        "title": "Example study", "page_number": 2, "score": 1.0,
+        "content": "The authors use a transformer architecture. The model achieves 92 percent accuracy.",
+    }]
+    method_answer = extractive_answer("What architecture was used?", evidence)
+    result_answer = extractive_answer("What accuracy was reported?", evidence)
+    assert "transformer architecture" in method_answer
+    assert "92 percent accuracy" in result_answer
+    assert method_answer != result_answer
+
+def test_extractive_answer_does_not_present_unmatched_evidence_as_answer():
+    evidence = [{"title": "Example study", "page_number": 1, "content": "The study evaluates a transformer model."}]
+    answer = extractive_answer("What is the funding source?", evidence)
+    assert "couldn't find a passage" in answer
