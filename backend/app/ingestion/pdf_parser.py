@@ -1,5 +1,5 @@
 import re
-import fitz
+import pymupdf as fitz
 from app.core.config import settings
 
 class PDFParseError(ValueError):
@@ -37,6 +37,8 @@ def parse_pdf(path: str):
         page_count = doc.page_count
         if not doc.is_pdf or page_count == 0:
             raise PDFParseError("The uploaded PDF does not contain any pages.")
+        if page_count > settings.max_pdf_pages:
+            raise PDFParseError(f"The PDF has too many pages. The limit is {settings.max_pdf_pages} pages.")
         pages = []
         all_chunks = []
         for idx, page in enumerate(doc):

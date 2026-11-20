@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     database_path: str = "/tmp/literaai.db" if ON_VERCEL else "data/literaai.db"
     upload_dir: str = "/tmp/literaai-uploads" if ON_VERCEL else "data/uploads"
     max_upload_mb: int = 4 if ON_VERCEL else 30
+    max_pdf_pages: int = 500
     chunk_size: int = 1100
     chunk_overlap: int = 180
     ollama_enabled: bool = False

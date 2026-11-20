@@ -1,4 +1,5 @@
-import uuid, shutil
+import os, uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, HTTPException
@@ -13,13 +14,29 @@ from app.llm.ollama_client import generate_answer
 from app.reasoning.analysis import compare_papers, research_gaps, build_graph
 from app.api.schemas import ChatRequest, CompareRequest, GapRequest
 
-app = FastAPI(title="LiteraAI API", version="0.1.0", description="Local-first, evidence-grounded research intelligence MVP")
-app.add_middleware(CORSMiddleware, allow_origins=[settings.frontend_origin, "http://127.0.0.1:5173"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
-
-@app.on_event("startup")
-def startup():
+@asynccontextmanager
+async def lifespan(_app):
     settings.uploads_path.mkdir(parents=True, exist_ok=True)
     init_db()
+    yield
+
+app = FastAPI(title="LiteraAI API", version="0.1.0", description="Local-first, evidence-grounded research intelligence MVP",
+              lifespan=lifespan,
+              docs_url=None if os.getenv("VERCEL") == "1" else "/docs",
+              redoc_url=None if os.getenv("VERCEL") == "1" else "/redoc",
+              openapi_url=None if os.getenv("VERCEL") == "1" else "/openapi.json")
+app.add_middleware(CORSMiddleware, allow_origins=[settings.frontend_origin, "http://127.0.0.1:5173"], allow_credentials=False,
+                   allow_methods=["GET", "POST", "DELETE"], allow_headers=["Content-Type"])
+
+@app.middleware("http")
+async def security_headers(request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 def get_papers(ids=None):
     with db_session() as conn:
@@ -167,6 +184,8 @@ def gaps(req: GapRequest):
 @app.get("/api/graph")
 def graph(paper_ids: str | None = None):
     ids = [x for x in (paper_ids or "").split(",") if x] or None
+    if ids and (len(ids) > 50 or any(len(item) > 64 for item in ids)):
+        raise HTTPException(400, "Select no more than 50 valid paper identifiers.")
     papers = get_papers(ids)
     return build_graph(papers, get_chunks([p["id"] for p in papers]))
 
