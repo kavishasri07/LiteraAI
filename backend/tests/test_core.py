@@ -48,6 +48,18 @@ def test_security_headers_are_set_on_api_responses():
     assert response.headers["X-Frame-Options"] == "DENY"
     assert response.headers["Cache-Control"] == "no-store"
 
+def test_vercel_applies_security_headers_to_every_route():
+    import json
+    from pathlib import Path
+
+    config = json.loads((Path(__file__).resolve().parents[2] / "vercel.json").read_text())
+    all_routes = next(rule for rule in config["headers"] if rule["source"] == "/(.*)")
+    headers = {header["key"].lower(): header["value"] for header in all_routes["headers"]}
+    assert "content-security-policy" in headers
+    assert headers["x-content-type-options"] == "nosniff"
+    assert headers["x-frame-options"] == "DENY"
+    assert headers["referrer-policy"] == "strict-origin-when-cross-origin"
+
 def test_retrieval_counts_terms_once_per_token(monkeypatch):
     from contextlib import contextmanager
     from app.retrieval import retriever
